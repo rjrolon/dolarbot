@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: bot-dolar
+    env: python
+    plan: free
+    buildCommand: ""
+    startCommand: "python cambios_replit.py"
