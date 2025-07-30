@@ -104,7 +104,7 @@ def escuchar_telegram():
             for update in data["result"]:
                 offset = update["update_id"] + 1
                 mensaje = update.get("message")
-                if mensaje and "text" in mensaje and str(mensaje["chat"]["id"]) == CHAT_ID:
+                if mensaje and "text" in mensaje and mensaje["chat"]["id"] == int(CHAT_ID):
                     texto = mensaje["text"].strip().lower()
                     if texto in ["/cotizaciones", "cotizaciones"]:
                         enviar_cotizaciones_iniciales()
