@@ -47,9 +47,7 @@ def enviar_cotizaciones_iniciales():
         objetivos = [item for item in datos if item["name"].lower() in NOMBRES_OBJETIVO]
         objetivos_ordenados = sorted(objetivos, key=lambda x: float(x["ask"]))
         hora = datetime.now().strftime("%H:%M:%S")
-        mensaje = f"*📊 Cotizaciones Iniciales – {hora}*
-
-"
+        mensaje = f"*📊 Cotizaciones Iniciales – {hora}*\n\n"
         for item in objetivos_ordenados:
             nombre = item["prettyName"]
             ask = float(item["ask"])
