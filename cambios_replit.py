@@ -102,15 +102,18 @@ def escuchar_telegram():
             response = requests.get(url)
             data = response.json()
             for update in data["result"]:
-    offset = update["update_id"] + 1
-    mensaje = update.get("message")
-    if mensaje and "text" in mensaje and mensaje["chat"]["id"] == int(CHAT_ID):
-        texto = mensaje["text"].strip().lower()
-        if texto in ["/cotizaciones", "cotizaciones"]:
+            offset = update["update_id"] + 1
+            mensaje = update.get("message")
+            print("📩 Mensaje recibido:", mensaje)  # DEBUG
+            if mensaje and "text" in mensaje:
+            print("📥 Comando recibido:", mensaje["text"])
+            texto = mensaje["text"].strip().lower()
+            if texto in ["/cotizaciones", "cotizaciones"]:
             enviar_cotizaciones_iniciales()
-        else:
+            else:
             respuesta = interpretar_comando(texto)
             enviar_mensaje_telegram(respuesta)
+
 
         except Exception as e:
             print(f"Error en Telegram listener: {e}")
