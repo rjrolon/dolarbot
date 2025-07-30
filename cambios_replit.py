@@ -10,8 +10,8 @@ import os
 # CONFIG
 API_URL = "https://api.comparadolar.ar/quotes"
 NOMBRES_OBJETIVO = ["cocos", "fiwind", "plus", "tiendadolar", "brubank", "letsbit"]
-BOT_TOKEN = os.environ.get("8192565046:AAHBsxIYWhJslDApINWpyWNChV3Hx_lPU-U")
-CHAT_ID = os.environ.get("1842932768")
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+CHAT_ID = os.environ.get("CHAT_ID")
 UMBRAL_ASK = 9999
 INTERVALO_MINUTOS = 10
 
