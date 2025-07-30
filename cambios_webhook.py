@@ -1,8 +1,11 @@
 from flask import Flask, request
+import threading
 import requests
+import time
+import schedule
 import re
-import os
 from datetime import datetime
+import os
 
 # CONFIG
 API_URL = "https://api.comparadolar.ar/quotes"
@@ -12,25 +15,53 @@ CHAT_ID = os.environ.get("CHAT_ID")
 UMBRAL_ASK = 9999
 INTERVALO_MINUTOS = 10
 
+# FLASK PARA MANTENER EL BOT Y RECIBIR MENSAJES
 app = Flask(__name__)
 
-@app.route('/')
+@app.route('/', methods=['GET'])
 def index():
-    return "🟢 Bot corriendo (webhook)"
+    return "🟢 Bot corriendo correctamente"
+
+@app.route('/', methods=['POST'])
+def webhook():
+    data = request.get_json()
+    print("📩 Webhook recibido:", data)
+
+    if "message" in data:
+        mensaje = data["message"]
+        chat_id = mensaje["chat"]["id"]
+        texto = mensaje.get("text", "").strip().lower()
+
+        if str(chat_id) != CHAT_ID:
+            print(f"Ignorando mensaje de otro chat ({chat_id})")
+            return "ok"
+
+        if texto in ["/cotizaciones", "cotizaciones"]:
+            enviar_cotizaciones_iniciales()
+        else:
+            respuesta = interpretar_comando(texto)
+            enviar_mensaje_telegram(respuesta)
+
+    return "ok"
 
 def enviar_mensaje_telegram(mensaje):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {
         "chat_id": CHAT_ID,
         "text": mensaje,
-        "parse_mode": "Markdown"
+        "parse_mode": "Markdown",
+        "reply_markup": {
+            "keyboard": [[{"text": "/cotizaciones"}]],
+            "resize_keyboard": True,
+            "one_time_keyboard": False
+        }
     }
     try:
         requests.post(url, json=payload)
     except Exception as e:
         print(f"Error al enviar mensaje: {e}")
 
-def enviar_cotizaciones():
+def enviar_cotizaciones_iniciales():
     try:
         response = requests.get(API_URL)
         response.raise_for_status()
@@ -38,48 +69,59 @@ def enviar_cotizaciones():
         objetivos = [item for item in datos if item["name"].lower() in NOMBRES_OBJETIVO]
         objetivos_ordenados = sorted(objetivos, key=lambda x: float(x["ask"]))
         hora = datetime.now().strftime("%H:%M:%S")
-        mensaje = f"*📊 Cotizaciones – {hora}*
-
-"
+        mensaje = f"*📊 Cotizaciones Iniciales – {hora}*\n\n"
         for item in objetivos_ordenados:
             nombre = item["prettyName"]
             ask = float(item["ask"])
-            mensaje += f"*{nombre}*: ${ask}
-{item['url']}
-
-"
+            mensaje += f"*{nombre}*: ${ask}\n{item['url']}\n\n"
         enviar_mensaje_telegram(mensaje)
     except Exception as e:
-        print(f"Error al enviar cotizaciones: {e}")
+        print(f"Error al enviar cotizaciones iniciales: {e}")
+
+def verificar_ask():
+    try:
+        response = requests.get(API_URL)
+        response.raise_for_status()
+        datos = response.json()
+        objetivos = [item for item in datos if item["name"].lower() in NOMBRES_OBJETIVO]
+        objetivos_ordenados = sorted(objetivos, key=lambda x: float(x["ask"]))
+        print("\n--- Cotizaciones ordenadas por 'ask' ---")
+        lineas_alerta = []
+        for item in objetivos_ordenados:
+            nombre = item["prettyName"]
+            ask = float(item["ask"])
+            print(f"{nombre}: ${ask}")
+            if ask < UMBRAL_ASK:
+                linea = f"*{nombre}*: ${ask} 🔻\n{item['url']}"
+                lineas_alerta.append(linea)
+        if lineas_alerta:
+            mensaje = "⚠️ *ALERTA DE DÓLAR* ⚠️\n\n" + "\n\n".join(lineas_alerta)
+            enviar_mensaje_telegram(mensaje)
+    except Exception as e:
+        print(f"Error al verificar: {e}")
 
 def interpretar_comando(texto):
+    global UMBRAL_ASK, INTERVALO_MINUTOS
     match = re.match(r"(\d+)([mh])\s+(\d+)", texto.lower())
     if not match:
         return "❌ Formato inválido. Usa: `15m 1180` o `1h 1200`"
     cantidad = int(match.group(1))
     unidad = match.group(2)
     nuevo_umbral = int(match.group(3))
-    minutos = cantidad * (60 if unidad == "h" else 1)
-    global UMBRAL_ASK, INTERVALO_MINUTOS
+    INTERVALO_MINUTOS = cantidad * (60 if unidad == "h" else 1)
     UMBRAL_ASK = nuevo_umbral
-    INTERVALO_MINUTOS = minutos
-    return f"✅ Monitoreo actualizado:\n• Cada *{minutos} minutos*\n• Umbral: *${nuevo_umbral}*"
+    schedule.clear()
+    schedule.every(INTERVALO_MINUTOS).minutes.do(verificar_ask)
+    return f"✅ Monitoreo actualizado:\n• Cada *{INTERVALO_MINUTOS} minutos*\n• Umbral: *${UMBRAL_ASK}*"
 
-@app.route(f'/{BOT_TOKEN}', methods=['POST'])
-def webhook():
-    update = request.get_json()
-    if "message" in update and "text" in update["message"]:
-        mensaje = update["message"]
-        texto = mensaje["text"].strip().lower()
-        chat_id = mensaje["chat"]["id"]
-        if str(chat_id) != str(CHAT_ID):
-            return "❌ Chat no autorizado", 403
-        if texto in ["/cotizaciones", "cotizaciones"]:
-            enviar_cotizaciones()
-        else:
-            respuesta = interpretar_comando(texto)
-            enviar_mensaje_telegram(respuesta)
-    return "OK", 200
+def iniciar_bot():
+    print(f"🔄 Bot iniciado a las {datetime.now().strftime('%H:%M:%S')}")
+    enviar_cotizaciones_iniciales()
+    schedule.every(INTERVALO_MINUTOS).minutes.do(verificar_ask)
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
 
 if __name__ == "__main__":
+    threading.Thread(target=iniciar_bot, daemon=True).start()
     app.run(host="0.0.0.0", port=8080)
